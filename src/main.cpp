@@ -9,7 +9,7 @@
 
 #define BUFFER_SIZE 11
 #define SAMPLING_INTERVAL_MILLISECONDS 1000
-#define AMBIENT_POST_INTERVAL_SECONDS 30
+#define AMBIENT_POST_INTERVAL_SECONDS 300
 
 // const char* ssid = "****" <= secret.h
 // const char* pass = "****" <= secret.h
@@ -22,6 +22,7 @@ Adafruit_BMP280 bme;
 float pressure = 0.0;
 float temp = 0.0;
 float humid = 0.0;
+float battery = 0.0;
 float pressureBuffer[BUFFER_SIZE];
 float tempBuffer[BUFFER_SIZE];
 float humidBuffer[BUFFER_SIZE];
@@ -37,6 +38,7 @@ void setup()
 	M5.begin();
 	Wire.begin();
 	M5.Lcd.setTextSize(1);
+	M5.Lcd.setBrightness(64);
 	M5.Lcd.println("Hello World!");
 
 	while (!bme.begin(0x76))
@@ -57,6 +59,7 @@ void setup()
 void loop()
 {
 	if(samplingCounter > AMBIENT_POST_INTERVAL_SECONDS){
+		battery = M5.Axp.GetBatVoltage();
 		float avePressure = 0;
 		float aveTemp = 0;
 		float aveHumid = 0;
@@ -72,9 +75,12 @@ void loop()
 		ambient.set(1, avePressure / 100.0);
 		ambient.set(2, aveTemp);
 		ambient.set(3, aveHumid);
+		ambient.set(4, battery);
 		ambient.send();
 
 		samplingCounter = 0;
+		M5.Lcd.clear();
+		M5.Lcd.printf("Power: %.1f [V], \r\n", battery);
 		M5.Lcd.printf("%.1f[deg], %.1f[%%], %.1f [hPa]\r\n", aveTemp, aveHumid, avePressure / 100.0);
 	}
 
