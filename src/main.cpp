@@ -15,7 +15,7 @@ portMUX_TYPE timer0Mutex = portMUX_INITIALIZER_UNLOCKED;
 volatile bool isTimer0Ticked = false;
 const uint16_t timer0Prescaler = 80;// 80MHz / 80 = 1MHz
 const int esp32SystemClock = 80 * 1e6;
-const int timer0TickIntervalMilliSeconds = 10 * 1000;
+const int timer0TickIntervalMilliSeconds = 30 * 1000;
 uint64_t timer0InterruptTick =  (double)esp32SystemClock / (double)timer0Prescaler * (double)timer0TickIntervalMilliSeconds / 1000.0;
 
 const int mhz19cPin = 33; 
@@ -47,6 +47,7 @@ void setup()
 
 	WiFi.begin(ssid, pass);
 	while( WiFi.status() != WL_CONNECTED){
+		// TODO: timeout
 		delay(500);
 		M5.Lcd.print(".");
     	// Serial.println(".");
