@@ -15,14 +15,12 @@ portMUX_TYPE timer0Mutex = portMUX_INITIALIZER_UNLOCKED;
 volatile bool isTimer0Ticked = false;
 const uint16_t timer0Prescaler = 80;// 80MHz / 80 = 1MHz
 const int esp32SystemClock = 80 * 1e6;
-const int ppd42OutputCalcIntervalSeconds = 30;
-const int timer0TickIntervalMilliSeconds = ppd42OutputCalcIntervalSeconds * 1000;
+const int timer0TickIntervalMilliSeconds = 10 * 1000;
 uint64_t timer0InterruptTick =  (double)esp32SystemClock / (double)timer0Prescaler * (double)timer0TickIntervalMilliSeconds / 1000.0;
 
-const int ppd42Pin = 33; 
-unsigned int ppd42OutputLowDuration = 0;
-double ppd42OutputLowRatio = 0.0;
-double pm25Amount = 0.0;
+const int mhz19cPin = 33; 
+unsigned int mhz19cOutputHighDuration = 0;
+float cppm = 0.0;
 
 void IRAM_ATTR onTimer0Ticked(){
 	portENTER_CRITICAL_ISR(&timer0Mutex);
@@ -30,34 +28,19 @@ void IRAM_ATTR onTimer0Ticked(){
 	portEXIT_CRITICAL_ISR(&timer0Mutex);
 }
 
-// 単位をμg/m^3に変換
-double ratio2ugm3 (double ratio)
-{
-	double concent = 1.1 * pow(ratio, 3) - 3.8 * pow(ratio, 2) + 520.0 * ratio + 0.62;	
-	
-	// 全粒子密度(1.65E12μg/ m3)
-	double density = 1.65 * 1E12;
-	// PM2.5粒子の半径(2.5μm)
-	double r25 = 2.5 * 1E-6;
-	double vol25 = (4.0 / 3.0) * PI * pow (r25, 3);
-	double mass25 = density * vol25; // μg
-	double K = 3531.5; // per m^3 
-	// μg/m^3に変換して返す
-	return concent * K * mass25;
-}
-
-
 void setup()
 {
 	// put your setup code here, to run once:
 	M5.begin(115200);
 	M5.Lcd.setTextSize(3);
 	M5.Lcd.setBrightness(64);
+	disableCore0WDT();
+	disableCore1WDT();
 	// M5.Lcd.sleep();
 	// M5.Lcd.setBrightness(0);
 	// Serial.println("Hello World!");
 
-	pinMode(ppd42Pin, INPUT);
+	pinMode(mhz19cPin, INPUT);
 	timer0 = timerBegin(0, timer0Prescaler, true);// 1us?
 	timerAttachInterrupt(timer0, &onTimer0Ticked, true);
 	timerAlarmWrite(timer0, timer0InterruptTick, true);
@@ -90,24 +73,29 @@ void loop()
 	}
 	portEXIT_CRITICAL_ISR(&timer0Mutex);
 
-	ppd42OutputLowDuration += pulseIn(ppd42Pin, LOW, 100 * 1000);// TODO: 別スレッドにする
 	if(isSetValue == true){
-		ppd42OutputLowRatio = (double)ppd42OutputLowDuration / (double)(ppd42OutputCalcIntervalSeconds * 1e6);
-		ppd42OutputLowDuration = 0;
-
-		double concent = 1.1 * pow(ppd42OutputLowRatio, 3) - 3.8 * pow(ppd42OutputLowRatio, 2) + 520.0 * ppd42OutputLowRatio + 0.62;	
-		// pm25Amount = ratio2ugm3(ppd42OutputLowRatio * 100);
-		
-		// display
-		M5.Lcd.setCursor(0, 0);
-		M5.Lcd.printf("dust: %.0lf \r\n", concent);
-
 		// post ambient
-		ambient.set(1, concent);
+		ambient.set(1, cppm);
 		ambient.send();
 
 		isSetValue = false;
 	}
+
+	while(true){
+		if(digitalRead(mhz19cPin) != LOW){
+			break;
+		}
+	}
+	mhz19cOutputHighDuration = pulseIn(mhz19cPin, HIGH, 3000 * 1000);// TODO: other thread
+	if(mhz19cOutputHighDuration != 0){
+		float th = (float)mhz19cOutputHighDuration / 1000.0;
+		cppm = 2.0 * (th - 2.0);
+		M5.Lcd.setCursor(0, 0);
+		M5.Lcd.printf("CO2\r\n");
+		M5.Lcd.printf("%5.0f [ppm]\r\n", cppm);
+	}
+
+	delay(1);
 }
 
 
